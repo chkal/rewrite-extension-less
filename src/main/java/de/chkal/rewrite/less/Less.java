@@ -7,15 +7,15 @@ import org.ocpsoft.rewrite.servlet.config.IPath;
 import org.ocpsoft.rewrite.servlet.config.Path;
 import org.ocpsoft.rewrite.servlet.http.event.HttpInboundServletRewrite;
 
-public class LessRenderer implements Rule {
+public class Less implements Rule {
 
   private final IPath resourcePath;
 
-  public static LessRenderer fileExtension(String pattern) {
-    return new LessRenderer( Path.matches(pattern));
+  public static Less fileExtension(String pattern) {
+    return new Less( Path.matches(pattern));
   }
   
-  public LessRenderer(IPath resourcePath) {
+  public Less(IPath resourcePath) {
     this.resourcePath = resourcePath;
   }
   
