@@ -8,29 +8,36 @@ import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
+import org.ocpsoft.logging.Logger;
 import org.ocpsoft.rewrite.config.Rule;
 import org.ocpsoft.rewrite.context.EvaluationContext;
 import org.ocpsoft.rewrite.event.Rewrite;
-import org.ocpsoft.rewrite.servlet.config.IPath;
-import org.ocpsoft.rewrite.servlet.config.Path;
-import org.ocpsoft.rewrite.servlet.event.BaseRewrite.Flow;
 import org.ocpsoft.rewrite.servlet.http.event.HttpInboundServletRewrite;
 
+/**
+ * 
+ * Implementation of {@link Rule} that renders LESS files to CSS.
+ * 
+ * @author Christian Kaltepoth
+ * 
+ */
 public class Less implements Rule
 {
 
-   private final IPath resourcePath;
+   private final Logger log = Logger.getLogger(Less.class);
+
+   private final String suffix;
 
    private final LessEngine lessEngine = new LessEngine();
 
-   public static Less matches(String pattern)
+   public static Less fileType(String fileType)
    {
-      return new Less(Path.matches(pattern));
+      return new Less("." + fileType);
    }
 
-   public Less(IPath resourcePath)
+   private Less(String suffix)
    {
-      this.resourcePath = resourcePath;
+      this.suffix = suffix;
    }
 
    @Override
@@ -43,9 +50,12 @@ public class Less implements Rule
    public boolean evaluate(Rewrite event, EvaluationContext context)
    {
 
+      // rendering effects only inbound requests
       if (event instanceof HttpInboundServletRewrite) {
 
-         if (resourcePath.evaluate(event, context)) {
+         // the rule matches if the path ends with the suffix
+         String path = ((HttpInboundServletRewrite) event).getRequestPath();
+         if (path.endsWith(suffix)) {
             return true;
          }
 
@@ -58,31 +68,37 @@ public class Less implements Rule
    @Override
    public void perform(Rewrite event, EvaluationContext context)
    {
+
+      // rendering effects only inbound requests
       if (event instanceof HttpInboundServletRewrite) {
 
-         HttpInboundServletRewrite inboundServletRewrite = (HttpInboundServletRewrite) event;
+         HttpInboundServletRewrite inboundRewrite = (HttpInboundServletRewrite) event;
 
-         String path = inboundServletRewrite.getRequestPath();
+         // try to load the accessed LESS source
+         ServletContext servletContext = inboundRewrite.getRequest().getServletContext();
+         InputStream inputStream = servletContext.getResourceAsStream(inboundRewrite.getRequestPath());
 
-         ServletContext servletContext = inboundServletRewrite.getRequest().getServletContext();
-
-         InputStream inputStream = servletContext.getResourceAsStream(path);
-
+         // proceed only if requested resource has been found
          if (inputStream != null) {
 
+            // IO errors must be handled here
             try {
 
+               // read the LESS source and render it to CSS
                String lessData = IOUtils.toString(inputStream);
                String cssData = lessEngine.process(lessData);
 
-               HttpServletResponse response = inboundServletRewrite.getResponse();
+               // write the CSS to the client
+               HttpServletResponse response = inboundRewrite.getResponse();
                response.getOutputStream().write(cssData.getBytes(Charset.forName("UTF8")));
                response.flushBuffer();
 
-               inboundServletRewrite.setFlow(Flow.HANDLED);
+               // the application doesn't need to process the request anymore
+               inboundRewrite.abort();
+
             }
             catch (IOException e) {
-               // TODO
+               log.error("Failed to process LESS file", e);
             }
 
          }
